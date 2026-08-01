@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LLM Fine-Tuning Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Fragment+Mono:ital@0;1&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="top">
+    <div class="brand">
+      <span class="brand-mark">FT</span>
+      <div>
+        <p class="brand-name">Fine-Tuning Engine</p>
+        <p class="brand-sub" data-i18n="brand.sub">QLoRA · Dataset · Export GGUF</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <nav class="tabs" data-i18n-aria="nav.aria" aria-label="Fluxo">
+        <button type="button" class="tab active" data-tab="setup" data-i18n="nav.setup">1 · Configurar</button>
+        <button type="button" class="tab" data-tab="train" data-i18n="nav.train">2 · Treinar</button>
+        <button type="button" class="tab" data-tab="export" data-i18n="nav.export">3 · Exportar</button>
+        <button type="button" class="tab" data-tab="chat" data-i18n="nav.chat">4 · Chat</button>
+      </nav>
+      <label class="lang-switch" title="Language">
+        <span class="sr-only" data-i18n="lang.label">Idioma</span>
+        <select id="lang-select" aria-label="Language">
+          <option value="pt-BR">PT</option>
+          <option value="en">EN</option>
+          <option value="es">ES</option>
+        </select>
+      </label>
+      <button type="button" class="ghost" id="btn-refresh" data-i18n="btn.refresh">Atualizar</button>
+      <a class="ghost" href="/docs" target="_blank" rel="noreferrer" data-i18n="btn.api">API</a>
+    </div>
+  </header>
+
+  <main class="layout setup-layout" id="view-setup">
+    <section class="panel form-panel">
+      <div class="view-head">
+        <div>
+          <p class="step-label" data-i18n="setup.step">Passo 1</p>
+          <h1 data-i18n="setup.title">Configurar experimento</h1>
+          <p class="lede" data-i18n="setup.lede">Projeto, modelo, datasets e hiperparâmetros. Salve o YAML antes de treinar.</p>
+        </div>
+        <button type="button" class="ghost" id="btn-goto-train" data-i18n="setup.goto_train">Ir para Treinar →</button>
+      </div>
+
+      <form id="train-form">
+        <fieldset>
+          <legend data-i18n="setup.project">Projeto</legend>
+          <label>
+            <span data-i18n="setup.name">Nome</span>
+            <input name="project_name" id="project_name" required placeholder="my_experiment" value="my_experiment" />
+          </label>
+          <label>
+            <span data-i18n="setup.config">Config</span>
+            <div class="path-row">
+              <select id="load-config"><option value="">—</option></select>
+              <button type="button" class="browse-btn" data-browse="config" data-i18n="setup.browse">Explorar</button>
+              <label class="upload-btn"><span data-i18n="setup.upload">Upload</span><input type="file" id="upload-config" accept=".yaml,.yml" hidden /></label>
+              <a class="browse-btn" href="/api/templates/config" download="default.template.yaml" data-i18n="setup.download">Download</a>
+            </div>
+          </label>
+          <label>
+            <span data-i18n="setup.output_dir">Pasta de saída (adapter)</span>
+            <div class="path-row">
+              <input name="output_dir" id="output_dir" placeholder="./adapters/my_experiment" />
+              <button type="button" class="browse-btn" data-browse="output_dir" data-i18n="setup.browse">Explorar</button>
+            </div>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="setup.base_model_legend">Modelo base</legend>
+          <label>
+            <span data-i18n="setup.local_model">Modelo local</span>
+            <select id="local-model">
+              <option value="" data-i18n="setup.local_model_manual">Usar ID Hugging Face / caminho manual</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="setup.base_model">Base model (HF ID ou caminho)</span>
+            <div class="path-row">
+              <input name="base_model" id="base_model" required list="hf-suggestions" placeholder="meta-llama/Llama-3.2-3B-Instruct" />
+              <datalist id="hf-suggestions"></datalist>
+              <button type="button" class="browse-btn" data-browse="base_model" data-i18n="setup.browse">Explorar</button>
+            </div>
+          </label>
+          <label class="check tip" data-i18n-tip="setup.qlora_tip" data-tip="Carrega o modelo em 4-bit (QLoRA), reduzindo VRAM.">
+            <input type="checkbox" name="load_in_4bit" id="load_in_4bit" checked />
+            <span data-i18n="setup.qlora">QLoRA 4-bit</span>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend data-i18n="setup.datasets">Datasets</legend>
+          <div class="path-row dataset-actions">
+            <button type="button" class="browse-btn" data-browse="datasets" data-i18n="setup.browse_jsonl">Explorar .jsonl</button>
+            <label class="upload-btn"><span data-i18n="setup.upload_jsonl">Upload .jsonl</span><input type="file" id="upload-dataset" accept=".jsonl" hidden /></label>
+            <a class="browse-btn" href="/api/templates/dataset" download="sample.jsonl" data-i18n="setup.download">Download</a>
+          </div>
+          <div id="dataset-list" class="chip-list"></div>
+          <div id="selected-datasets" class="selected-paths"></div>
+          <p class="hint" data-i18n="setup.dataset_hint">Formato: instruction + output.</p>
+        </fieldset>
+
+        <details class="collapsible" id="training-section">
+          <summary><span data-i18n="setup.hyper">Hiperparâmetros</span> <span class="muted" data-i18n="setup.hyper_muted">opcional · vem da config</span></summary>
+          <div class="grid-3">
+            <label class="tip" data-i18n-tip="setup.epochs_tip" data-tip="">Epochs<input type="number" name="epochs" id="epochs" min="1" value="2" /></label>
+            <label class="tip" data-i18n-tip="setup.batch_tip" data-tip="">Batch size<input type="number" name="batch_size" id="batch_size" min="1" value="2" /></label>
+            <label class="tip" data-i18n-tip="setup.accum_tip" data-tip="">Grad. accum.<input type="number" name="gradient_accumulation_steps" id="gradient_accumulation_steps" min="1" value="8" /></label>
+            <label class="tip" data-i18n-tip="setup.lr_tip" data-tip="">Learning rate<input type="number" name="learning_rate" id="learning_rate" step="0.00001" value="0.0002" /></label>
+            <label class="tip" data-i18n-tip="setup.seq_tip" data-tip="">Max seq length<input type="number" name="max_seq_length" id="max_seq_length" min="128" value="1024" /></label>
+            <label class="tip" data-i18n-tip="setup.steps_tip" data-tip="">Max steps<input type="number" name="max_steps" id="max_steps" min="0" data-i18n-placeholder="setup.max_steps_ph" placeholder="vazio = epochs" /></label>
+            <label class="tip" data-i18n-tip="setup.save_tip" data-tip="">Save strategy
+              <select name="save_strategy" id="save_strategy"><option value="steps">steps</option><option value="epoch">epoch</option></select>
+            </label>
+            <label class="tip" data-i18n-tip="setup.save_steps_tip" data-tip="">Save steps<input type="number" name="save_steps" id="save_steps" min="1" value="50" /></label>
+          </div>
+        </details>
+
+        <fieldset>
+          <legend data-i18n="setup.system">System prompt</legend>
+          <textarea name="system_prompt" id="system_prompt" rows="4">You are a helpful assistant. Follow the user's instructions carefully.
+Respond with the format requested in the prompt (plain text or JSON when asked).</textarea>
+        </fieldset>
+
+        <div class="sr-only" aria-hidden="true">
+          <input name="adapter_path" id="adapter_path" />
+          <input name="merged_path" id="merged_path" />
+          <input name="gguf_filename" id="gguf_filename" />
+        </div>
+
+        <div class="actions">
+          <button type="button" class="ghost" id="btn-save" data-i18n="setup.save_yaml">Salvar YAML</button>
+          <button type="button" class="primary" id="btn-save-and-train" data-i18n="setup.save_and_train">Salvar e ir para Treinar</button>
+        </div>
+        <p class="status" id="form-status" role="status"></p>
+      </form>
+    </section>
+
+    <aside class="panel side-panel setup-side">
+      <div class="side-block">
+        <h2 data-i18n="setup.summary">Resumo</h2>
+        <dl class="summary-list" id="setup-summary">
+          <div><dt data-i18n="setup.sum_project">Projeto</dt><dd id="sum-project">—</dd></div>
+          <div><dt data-i18n="setup.sum_model">Modelo</dt><dd id="sum-model">—</dd></div>
+          <div><dt data-i18n="setup.sum_datasets">Datasets</dt><dd id="sum-datasets">0</dd></div>
+          <div><dt data-i18n="setup.sum_config">Config</dt><dd id="sum-config">—</dd></div>
+        </dl>
+      </div>
+      <div class="flow-hint">
+        <p><strong data-i18n="setup.flow">Fluxo</strong></p>
+        <ol>
+          <li data-i18n="setup.flow_1">Configurar + salvar YAML</li>
+          <li data-i18n="setup.flow_2">Treinar e acompanhar logs</li>
+          <li data-i18n="setup.flow_3">Exportar GGUF</li>
+          <li data-i18n="setup.flow_4">Testar no Chat</li>
+        </ol>
+      </div>
+    </aside>
+  </main>
+
+  <main class="layout train-layout" id="view-train" hidden>
+    <section class="panel train-actions-panel">
+      <div class="view-head">
+        <div>
+          <p class="step-label" data-i18n="train.step">Passo 2</p>
+          <h1 data-i18n="train.title">Treinar</h1>
+          <p class="lede" data-i18n="train.lede">Inicie o fine-tune e acompanhe jobs/logs nesta tela.</p>
+        </div>
+      </div>
+      <div class="run-card" id="run-summary">
+        <div>
+          <p class="muted" data-i18n="train.experiment">Experimento</p>
+          <p class="run-title" id="run-project">—</p>
+          <p class="meta" id="run-meta">Configure no passo 1</p>
+        </div>
+        <div class="actions stack">
+          <button type="button" class="primary" id="btn-train" data-i18n="train.start">Iniciar treino</button>
+          <button type="button" class="ghost" id="btn-goto-setup" data-i18n="train.back_setup">← Ajustar config</button>
+        </div>
+      </div>
+      <p class="status" id="train-status" role="status"></p>
+    </section>
+
+    <aside class="panel side-panel">
+      <div class="side-block">
+        <h2 data-i18n="train.jobs">Jobs</h2>
+        <ul id="job-list" class="plain-list"></ul>
+        <div class="job-controls">
+          <button type="button" class="ghost" id="btn-stop" disabled data-i18n="train.stop">Parar job</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="panel log-panel" aria-label="Logs">
+      <div class="log-head">
+        <div>
+          <h2 data-i18n="train.logs">Logs</h2>
+          <p class="log-meta" id="log-meta">Nenhum job selecionado</p>
+        </div>
+        <div class="progress-box" id="progress-box" hidden>
+          <div class="progress-top">
+            <span id="progress-label">0%</span>
+            <span id="progress-detail" class="muted"></span>
+          </div>
+          <div class="progress-track" aria-hidden="true">
+            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="log-frame" id="log-frame">
+        <pre id="log-view" class="log-view">Nenhum job selecionado.</pre>
+      </div>
+    </section>
+  </main>
+
+  <main class="layout export-layout" id="view-export" hidden>
+    <section class="panel form-panel">
+      <div class="view-head">
+        <div>
+          <p class="step-label" data-i18n="export.step">Passo 3</p>
+          <h1 data-i18n="export.title">Exportar GGUF</h1>
+          <p class="lede" data-i18n="export.lede">Merge do adapter + conversão para Ollama/llama.cpp.</p>
+        </div>
+      </div>
+
+      <fieldset>
+        <legend data-i18n="export.paths">Caminhos de export</legend>
+        <div class="grid-2">
+          <label>
+            <span data-i18n="export.adapter">Adapter path</span>
+            <div class="path-row">
+              <input id="adapter_path_ui" placeholder="./adapters/my_experiment" />
+              <button type="button" class="browse-btn" data-browse="adapter_path" data-i18n="setup.browse">Explorar</button>
+            </div>
+          </label>
+          <label>
+            <span data-i18n="export.merged">Merged path</span>
+            <div class="path-row">
+              <input id="merged_path_ui" placeholder="./models/my_experiment_merged" />
+              <button type="button" class="browse-btn" data-browse="merged_path" data-i18n="setup.browse">Explorar</button>
+            </div>
+          </label>
+          <label class="span-2">
+            <span data-i18n="export.gguf">GGUF filename</span>
+            <div class="path-row">
+              <input id="gguf_filename_ui" placeholder="./models/my_experiment.gguf" />
+              <button type="button" class="browse-btn" data-browse="gguf_filename" data-i18n="setup.browse">Explorar</button>
+            </div>
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="actions">
+        <button type="button" class="accent" id="btn-export" disabled data-i18n="export.start">Exportar GGUF</button>
+        <button type="button" class="ghost" id="btn-goto-chat" data-i18n="export.goto_chat">Ir para Chat →</button>
+      </div>
+      <p class="status" id="export-status" role="status"></p>
+      <p class="hint" data-i18n="export.hint">Salve a config no passo 1 (ou rode um treino) antes de exportar.</p>
+    </section>
+
+    <aside class="panel side-panel">
+      <div class="side-block">
+        <h2 data-i18n="export.adapters">Adapters</h2>
+        <ul id="adapter-list" class="plain-list"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <main class="layout chat-layout" id="view-chat" hidden>
+    <section class="panel chat-setup">
+      <div class="view-head">
+        <div>
+          <p class="step-label" data-i18n="chat.step">Passo 4</p>
+          <h1 data-i18n="chat.title">Chat GGUF</h1>
+          <p class="lede" data-i18n="chat.lede">Registre o `.gguf` no Ollama e simule prompts de treino.</p>
+        </div>
+      </div>
+
+      <p class="status" id="ollama-status" role="status">Checando Ollama…</p>
+
+      <fieldset>
+        <legend data-i18n="chat.model_legend">Modelo Ollama</legend>
+        <label>
+          <span data-i18n="chat.model">Modelo</span>
+          <div class="path-row">
+            <select id="chat-model"><option value="">—</option></select>
+            <button type="button" class="browse-btn" id="btn-refresh-ollama" data-i18n="btn.refresh">Atualizar</button>
+          </div>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="chat.register">Registrar GGUF</legend>
+        <label>
+          <span data-i18n="chat.gguf_file">Arquivo em models/</span>
+          <select id="chat-gguf"><option value="">—</option></select>
+        </label>
+        <label>
+          <span data-i18n="chat.ollama_name">Nome no Ollama</span>
+          <input id="chat-model-name" placeholder="my-experiment" />
+        </label>
+        <button type="button" class="primary" id="btn-register-gguf" data-i18n="chat.create_model">Criar modelo no Ollama</button>
+      </fieldset>
+
+      <fieldset>
+        <legend data-i18n="chat.system">System prompt</legend>
+        <textarea id="chat-system" rows="4"></textarea>
+      </fieldset>
+    </section>
+
+    <section class="panel chat-panel">
+      <div class="chat-toolbar">
+        <h2 data-i18n="chat.sim">Simulação</h2>
+        <button type="button" class="ghost" id="btn-clear-chat" data-i18n="chat.clear">Limpar</button>
+      </div>
+      <div class="chat-messages" id="chat-messages" aria-live="polite"></div>
+      <form class="chat-compose" id="chat-form">
+        <textarea id="chat-input" rows="3" data-i18n-placeholder="chat.placeholder" placeholder="Ex.: Explain LoRA fine-tuning in one short paragraph." required></textarea>
+        <button type="submit" class="primary" id="btn-send-chat" data-i18n="chat.send">Enviar</button>
+      </form>
+      <p class="status" id="chat-status" role="status"></p>
+    </section>
+  </main>
+
+  <dialog id="explorer" class="explorer">
+    <div class="explorer-head">
+      <strong id="explorer-title" data-i18n="explorer.title">Explorer</strong>
+      <button type="button" class="ghost" id="explorer-close" data-i18n="explorer.close">Fechar</button>
+    </div>
+    <div class="explorer-path">
+      <button type="button" class="ghost" id="explorer-up" disabled>↑</button>
+      <code id="explorer-current">.</code>
+    </div>
+    <ul id="explorer-list" class="explorer-list"></ul>
+    <div class="explorer-foot">
+      <button type="button" class="ghost" id="explorer-cancel" data-i18n="explorer.cancel">Cancelar</button>
+      <button type="button" class="primary" id="explorer-select" disabled data-i18n="explorer.select">Selecionar</button>
+    </div>
+  </dialog>
+
+  <script src="/static/i18n.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
