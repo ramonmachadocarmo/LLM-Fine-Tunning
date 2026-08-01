@@ -38,3 +38,7 @@ logs/jobs/
 2. `scripts/train.py` → `adapters/`
 3. `scripts/export.py` → merge → GGUF in `models/`
 4. Chat tab / Ollama → test the GGUF
+
+## Roadmap
+
+See [TODO.md](TODO.md) for planned work beyond fine-tuning (eval, RAG, tracking, preference tuning, serving/safety).
