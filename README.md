@@ -1,6 +1,5 @@
 # LLM Fine-Tuning Engine
 
-[![CI](https://github.com/ramonmachadocarmo/LLM-Fine-Tunning/actions/workflows/ci.yml/badge.svg)](https://github.com/ramonmachadocarmo/LLM-Fine-Tunning/actions/workflows/ci.yml)
 [![Python 3.11](https://img.shields.io/badge/python-3.11.9-blue.svg)](https://www.python.org/downloads/)
 [![Poetry](https://img.shields.io/badge/packaging-Poetry-60A5FA.svg)](https://python-poetry.org/)
 [![PyTorch CUDA 12.1](https://img.shields.io/badge/PyTorch-2.5.1%2Bcu121-EE4C2C.svg)](https://pytorch.org/)
