@@ -18,6 +18,7 @@ try:
 except ImportError:
     import _bootstrap  # noqa: F401
 from src.config import load_yaml
+from src.training.chat_format import format_system_prompt
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
@@ -100,13 +101,15 @@ class AdapterChat:
             print("\n--- /save to dataset | /correct <text> to fix ---")
 
     def _generate(self) -> str:
-        prompt_str = ""
-        for msg in self.history:
-            prompt_str += (
-                f"<|start_header_id|>{msg['role']}<|end_header_id|>\n\n"
-                f"{msg['content']}<|eot_id|>"
+        try:
+            prompt_str = self.tokenizer.apply_chat_template(
+                self.history, tokenize=False, add_generation_prompt=True
             )
-        prompt_str += "<|start_header_id|>assistant<|end_header_id|>\n\n"
+        except Exception:
+            user = next((m["content"] for m in reversed(self.history) if m["role"] == "user"), "")
+            prompt_str = format_system_prompt(
+                self.system_prompt, user, "", tokenizer=self.tokenizer, generate=True
+            )
 
         inputs = self.tokenizer(prompt_str, return_tensors="pt").to(self.device)
         streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)

@@ -90,6 +90,9 @@ class JobRunner:
             log_path = ROOT / (job.log_path or f"logs/jobs/{job_id}.log")
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        from src.shared.hf_auth import load_dotenv_into_environ
+
+        load_dotenv_into_environ()
         with open(log_path, "w", encoding="utf-8") as log:
             log.write(f"$ {' '.join(command)}\n\n")
             log.flush()

@@ -356,10 +356,13 @@ textarea {
 .chip input { display: none; }
 
 .hint {
-  margin: 0;
+  margin: 0.35rem 0 0;
   color: var(--muted);
   font-size: 0.82rem;
 }
+
+.hint.status.ok { color: var(--ok); }
+.hint.status.bad { color: var(--bad); }
 
 .hint code, .log-view, .plain-list code {
   font-family: var(--font-mono);
@@ -505,6 +508,14 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   min-width: min(420px, 100%);
   flex: 1;
   max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.progress-row + .progress-row {
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--line);
 }
 
 .progress-top {
@@ -512,19 +523,33 @@ button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   justify-content: space-between;
   align-items: baseline;
   gap: 0.75rem;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.15rem;
 }
 
-#progress-label {
+.progress-kind {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+}
+
+#progress-label-overall,
+#progress-label-epoch {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.35rem;
+  font-size: 1.15rem;
   letter-spacing: -0.03em;
   color: var(--teal-deep);
 }
 
+.progress-detail {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+}
+
 .progress-track {
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   background: rgba(26, 36, 33, 0.08);
   border: 1px solid var(--line);

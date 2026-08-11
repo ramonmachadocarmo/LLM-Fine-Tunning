@@ -4,7 +4,10 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.shared.hf_auth import load_dotenv_into_environ
 from web.api.routes import router
+
+load_dotenv_into_environ()
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 

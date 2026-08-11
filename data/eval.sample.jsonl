@@ -1,0 +1,4 @@
+{"id": "lora-brief", "instruction": "Explain what LoRA fine-tuning is in one short paragraph.", "expected": "LoRA", "match": "contains"}
+{"id": "json-student", "instruction": "Return a JSON object with keys name and score for a fictional student Alice with score 92.", "expected": "{\"name\": \"Alice\", \"score\": 92}", "match": "json"}
+{"id": "dataset-tips", "instruction": "List three tips for writing a good instruction/output fine-tuning dataset.", "expected": "instruction", "match": "contains"}
+{"id": "exact-ack", "instruction": "Reply with exactly: ACK", "expected": "ACK", "match": "exact"}

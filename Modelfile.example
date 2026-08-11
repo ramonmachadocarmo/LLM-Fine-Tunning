@@ -1,5 +1,8 @@
 FROM ./models/my_experiment.gguf
 
+# Llama 3 / 3.2 — default in this repo for Llama bases.
+# Gemma 2: the UI Register button picks the Gemma template automatically.
+
 TEMPLATE """{{- if .System }}<|start_header_id|>system<|end_header_id|>
 
 {{ .System }}<|eot_id|>{{- end }}

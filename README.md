@@ -8,7 +8,7 @@
 
 **Repo:** [ramonmachadocarmo/LLM-Fine-Tunning](https://github.com/ramonmachadocarmo/LLM-Fine-Tunning)
 
-Generic **QLoRA / LoRA** fine-tuning engine: train adapters from JSONL, merge + export **GGUF**, and validate via **Ollama** — from CLI or a local web UI.
+Generic **QLoRA / LoRA** fine-tuning engine: train adapters from JSONL, run an **offline eval harness**, merge + export **GGUF**, and validate via **Ollama** — from CLI or a local web UI.
 
 ## Objective
 
@@ -19,21 +19,23 @@ Typical loop:
 1. Prepare JSONL (`instruction` / `output`)
 2. Configure base model + hyperparameters (YAML or UI)
 3. Train LoRA/QLoRA adapters
-4. Merge + convert to GGUF
-5. Chat / smoke-test with Ollama
+4. Eval base vs adapter (`make eval`)
+5. Merge + convert to GGUF
+6. Chat / smoke-test with Ollama
 
 ## Features
 
 | Area | What you get |
 |------|----------------|
 | **Training** | QLoRA (4-bit) or LoRA, PEFT + TRL, checkpoints, CLI overrides (`epochs`, `batch_size`, `learning_rate`) |
+| **Eval** | Fixed JSONL eval set, exact / contains / JSON metrics, `make eval` reports under `logs/eval/` |
 | **Data** | Multi-file JSONL, mixed schemas tolerated, train/val split, sample generator + prune helper |
 | **Config** | YAML templates, UI-saved configs under `configs/ui/`, form → config builder |
 | **Export** | Merge adapter into base → GGUF via `llama.cpp` (cloned on first export) |
 | **Web UI** | Tabs: Configure → Train → Export → Chat; job runner, live logs, progress, asset browser; UI in **pt-BR / en / es** |
 | **Chat** | List Ollama models, register GGUF, chat with system prompt |
-| **Ops** | OS-agnostic `Makefile` + `activate.sh` / `activate.ps1`, `fix-torch`, port cleanup |
-| **Tests** | Unit tests for config, schemas, checkpoints, prompt format, API health/templates |
+| **Ops** | OS-agnostic `Makefile` + `install.sh` / `install.ps1`, `fix-torch`, port cleanup |
+| **Tests** | Unit tests for config, schemas, checkpoints, prompt format, evaluation metrics, API health/templates |
 
 ## Requirements
 
@@ -50,7 +52,7 @@ macOS: fine for UI/export tooling; run QLoRA training on a Linux/Windows GPU hos
 ### Windows (PowerShell)
 
 ```powershell
-. .\activate.ps1
+.\install.ps1
 make setup
 make check
 make test
@@ -59,23 +61,27 @@ make test
 ### Linux / macOS
 
 ```bash
-source ./activate.sh
+chmod +x install.sh
+./install.sh
 make setup
 make check
 make test
 ```
+
+`install.ps1` / `install.sh` check (and try to install) make, curl, git, pyenv, Poetry, and Python **3.11.9**. Pass `-Setup` / `--setup` to also run `make setup`. Use `make doctor` anytime to print the active toolchain. `make` alone shows the styled help.
 
 ### Local artifacts (gitignored)
 
 | Path | What to put there |
 |------|-------------------|
 | `configs/default.yaml` | Copy from template |
-| `data/*.jsonl` | `instruction` + `output` rows |
+| `data/*.jsonl` | `instruction` + `output` rows (training); see also tracked `eval.sample.jsonl` |
 | `merged_models/` | Optional local HF base (or HF ID in config) |
 | `adapters/` | Created by training |
 | `models/*.gguf` | Created by export |
 | `llama.cpp/` | Auto-cloned on first export |
-| `logs/` | UI job logs |
+| `logs/jobs/` | UI job logs |
+| `logs/eval/` | Offline eval reports (`.json` + `.md`) |
 
 ```bash
 # Linux / macOS
@@ -102,7 +108,7 @@ make check
 ## Web UI
 
 ```bash
-# after activate.ps1 / activate.sh
+# after: ./install.sh  OR  .\install.ps1   then make setup
 make up
 # http://127.0.0.1:7860
 ```
@@ -121,12 +127,13 @@ make up
 | Sample dataset | `make generate` |
 | Balance | `make prune` |
 | Train | `make train` |
-| Verify | `make verify` |
+| Eval (base/adapter) | `make eval` / `make eval EVAL_TARGET=base` |
+| Verify (single prompt) | `make verify` |
 | Export GGUF | `make export` |
 | Adapter chat | `make chat` |
 | Unit tests | `make test` |
 
-Default config: `configs/default.yaml` (`CONFIG=path/to.yaml` to override).
+Default config: `configs/default.yaml` (`CONFIG=path/to.yaml` to override). Eval set default: `data/eval.sample.jsonl` (`EVAL_SET=…` to override).
 
 ## Tests
 
@@ -142,17 +149,26 @@ Coverage focus:
 
 - `src/config` — `safe_name`, normalize, form builder, path guards
 - `src/shared/checkpoints` — latest epoch selection
-- `src/training/dataset` — Llama 3 chat formatting
+- `src/training/chat_format` — tokenizer chat template (Gemma / Llama fallback)
+- `src/evaluation` — eval JSONL load, exact/contains/JSON metrics, report writer
 - `web/application` — preferred config, sample JSONL
 - `web/api` — health + template downloads, Pydantic schemas
 
-CI runs the same pytest suite on **Python 3.11.9** with the Poetry lock (including the `torch 2.5.1+cu121` wheel). Runners have no GPU — unit tests must not require CUDA.
-
 ## Dataset format
+
+Training:
 
 ```json
 {"instruction": "...", "output": "..."}
 ```
+
+Eval (`data/eval.sample.jsonl`):
+
+```json
+{"id": "case-1", "instruction": "...", "expected": "...", "match": "contains"}
+```
+
+`match`: `contains` (default), `exact`, or `json`. Details: [docs/EVAL.md](docs/EVAL.md).
 
 ## Ollama after export
 
@@ -169,12 +185,15 @@ ollama run my-ft "Explain LoRA in one paragraph."
 ```
 configs/default.template.yaml
 data/sample.jsonl
+data/eval.sample.jsonl
 generators/sample_dataset.py
 src/ web/ scripts/ tests/
-activate.sh / activate.ps1 / Makefile / pyproject.toml
-.github/workflows/ci.yml
+install.sh / install.ps1 / Makefile / pyproject.toml
 Modelfile.example
 docs/ARCHITECTURE.md
+docs/CONFIGURATION.md
+docs/EVAL.md
+docs/TODO.md
 LICENSE
 ```
 
@@ -182,14 +201,17 @@ LICENSE
 
 | Target | Action |
 |--------|--------|
+| `make doctor` / `make env` | Print toolchain status |
 | `make setup` | pyenv + Poetry + CUDA torch |
 | `make fix-torch` | Restore torch 2.5.1+cu121 |
 | `make check` | Validate Python / CUDA |
 | `make test` | Run pytest |
 | `make up` / `down` | Start / stop UI |
-| `make train` / `export` / `verify` / `chat` | Pipeline |
+| `make train` / `eval` / `export` / `verify` / `chat` | Pipeline |
 | `make generate` / `prune` | Dataset helpers |
+
+First-time host deps: `.\install.ps1` (Windows) or `./install.sh` (Linux/macOS).
 
 Portable helpers: `scripts/dev_helpers.py` (`dirs`, `free-port`, `fix-torch`).
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the roadmap in [docs/TODO.md](docs/TODO.md).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/EVAL.md](docs/EVAL.md), and the roadmap in [docs/TODO.md](docs/TODO.md).

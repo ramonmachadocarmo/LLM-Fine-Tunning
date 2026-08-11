@@ -19,6 +19,7 @@ DIRS = [
     "merged_models",
     "configs/ui",
     "logs/jobs",
+    "logs/eval",
 ]
 
 
@@ -154,6 +155,126 @@ def fix_torch() -> None:
     )
 
 
+def _color_enabled() -> bool:
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    return sys.stdout.isatty()
+
+
+def _c(code: str, text: str) -> str:
+    if not _color_enabled():
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def show_help(
+    *,
+    py_ver: str,
+    host: str,
+    port: str,
+    config: str,
+    eval_set: str,
+    eval_target: str,
+) -> None:
+    bold, dim = "1", "2"
+    cyan, green, yellow, magenta, blue = "36", "32", "33", "35", "34"
+    line = "=" * 58
+    print(_c(bold + ";" + cyan, f" +{line}+"))
+    print(_c(bold + ";" + cyan, f" |{'LLM Fine-Tuning Engine':^58}|"))
+    print(_c(bold + ";" + cyan, f" |{'QLoRA / Eval / GGUF / Ollama':^58}|"))
+    print(_c(bold + ";" + cyan, f" +{line}+"))
+    print()
+    print(_c(dim, f"  Python {py_ver} / Poetry / CUDA torch / make"))
+    print()
+    print(_c(bold + ";" + green, "  Setup"))
+    print(f"    {_c(cyan, 'make doctor')}      check toolchain (pyenv / poetry / venv / cuda)")
+    print(f"    {_c(cyan, 'make setup')}       pyenv {py_ver} + poetry sync + CUDA torch")
+    print(f"    {_c(cyan, 'make fix-torch')}   restore torch 2.5.1+cu121")
+    print(f"    {_c(cyan, 'make check')}       validate Python / Poetry / CUDA")
+    print(f"    {_c(cyan, 'make env')}         alias for doctor")
+    print()
+    print(_c(bold + ";" + yellow, "  App"))
+    print(f"    {_c(cyan, 'make up')}          UI at http://{host}:{port}")
+    print(f"    {_c(cyan, 'make down')}        free port {port}")
+    print(f"    {_c(cyan, 'make status')}      health check")
+    print()
+    print(_c(bold + ";" + magenta, "  Pipeline"))
+    print(f"    {_c(cyan, 'make generate')}    sample train.jsonl")
+    print(f"    {_c(cyan, 'make prune')}       balance dataset")
+    print(f"    {_c(cyan, 'make train')}       train ({config})")
+    print(f"    {_c(cyan, 'make eval')}        offline eval ({eval_set}, target={eval_target})")
+    print(f"    {_c(cyan, 'make verify')}      single-prompt smoke test")
+    print(f"    {_c(cyan, 'make export')}      merge + GGUF")
+    print(f"    {_c(cyan, 'make chat')}        adapter chat CLI")
+    print()
+    print(_c(bold + ";" + blue, "  Quality"))
+    print(f"    {_c(cyan, 'make test')}        pytest")
+    print(f"    {_c(cyan, 'make clean')}       remove __pycache__")
+    print()
+    print(_c(bold, "  First install"))
+    print(_c(dim, "    Windows:  .\\install.ps1"))
+    print(_c(dim, "    Linux:    ./install.sh"))
+    print(_c(dim, "    then:     make setup && make up"))
+    print()
+    print(_c(dim, "  Overrides: CONFIG=... EVAL_SET=... EVAL_TARGET=base|adapter HOST=... PORT=... NO_COLOR=1"))
+
+
+def doctor(*, pyenv_root: str, python_bin: str) -> None:
+    print(_c("1;36", ">> toolchain"))
+    print(f"  pyenv root : {pyenv_root}")
+    print(f"  python bin : {python_bin}")
+
+    pyenv = shutil.which("pyenv")
+    if pyenv:
+        try:
+            out = subprocess.run(["pyenv", "version"], capture_output=True, text=True, check=False)
+            print(f"  pyenv      : {(out.stdout or out.stderr).strip() or 'ok'}")
+        except OSError:
+            print(_c("33", "  pyenv      : found but failed to run"))
+    else:
+        print(_c("33", "  pyenv      : not on PATH"))
+
+    poetry = shutil.which("poetry")
+    if poetry:
+        out = subprocess.run(["poetry", "--version"], capture_output=True, text=True, check=False)
+        print(f"  poetry     : {(out.stdout or '').strip() or poetry}")
+    else:
+        print(_c("33", "  poetry     : missing"))
+
+    if sys.platform == "win32":
+        venv_py = ROOT / ".venv" / "Scripts" / "python.exe"
+    else:
+        venv_py = ROOT / ".venv" / "bin" / "python"
+    if venv_py.exists():
+        out = subprocess.run([str(venv_py), "--version"], capture_output=True, text=True, check=False)
+        print(f"  venv       : {(out.stdout or '').strip()}  ({venv_py})")
+    else:
+        print(_c("33", "  venv       : missing - run make setup"))
+
+    try:
+        out = subprocess.run(
+            [
+                "poetry",
+                "run",
+                "python",
+                "-c",
+                "import torch; print(torch.__version__, '| cuda:', torch.cuda.is_available())",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=ROOT,
+        )
+        if out.returncode == 0:
+            print(f"  torch      : {(out.stdout or '').strip()}")
+        else:
+            print(_c("33", "  torch      : not installed"))
+    except OSError:
+        print(_c("33", "  torch      : not installed"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="OS-agnostic Makefile helpers")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -161,6 +282,16 @@ def main() -> None:
     p_port = sub.add_parser("free-port")
     p_port.add_argument("port", type=int)
     sub.add_parser("fix-torch")
+    p_help = sub.add_parser("help")
+    p_help.add_argument("--py-ver", default="3.11.9")
+    p_help.add_argument("--host", default="127.0.0.1")
+    p_help.add_argument("--port", default="7860")
+    p_help.add_argument("--config", default="configs/default.yaml")
+    p_help.add_argument("--eval-set", default="data/eval.sample.jsonl")
+    p_help.add_argument("--eval-target", default="adapter")
+    p_doc = sub.add_parser("doctor")
+    p_doc.add_argument("--pyenv-root", default="")
+    p_doc.add_argument("--python-bin", default="")
     args = parser.parse_args()
 
     os.chdir(ROOT)
@@ -170,6 +301,17 @@ def main() -> None:
         free_port(args.port)
     elif args.cmd == "fix-torch":
         fix_torch()
+    elif args.cmd == "help":
+        show_help(
+            py_ver=args.py_ver,
+            host=args.host,
+            port=args.port,
+            config=args.config,
+            eval_set=args.eval_set,
+            eval_target=args.eval_target,
+        )
+    elif args.cmd == "doctor":
+        doctor(pyenv_root=args.pyenv_root or "(unset)", python_bin=args.python_bin or sys.executable)
 
 
 if __name__ == "__main__":
