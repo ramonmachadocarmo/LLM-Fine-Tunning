@@ -12,6 +12,9 @@ logger = setup_logging("ModelLoader")
 
 
 def load_tokenizer(model_name: str):
+    from src.shared.hf_auth import apply_hf_token_to_environ
+
+    apply_hf_token_to_environ()
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -22,10 +25,13 @@ def load_tokenizer(model_name: str):
 
 def load_base_model(model_name: str, load_in_4bit: bool = True):
     """Load base causal LM with optional 4-bit QLoRA prep."""
+    from src.shared.hf_auth import apply_hf_token_to_environ
+
+    apply_hf_token_to_environ()
     if not torch.cuda.is_available():
         raise RuntimeError(
             f"CUDA indisponível (torch={torch.__version__}). "
-            "Instale torch com CUDA: .\\activate.ps1; make setup"
+            "Install CUDA torch: make setup (or make fix-torch)"
         )
 
     bnb_config = None

@@ -6,13 +6,17 @@ from fastapi.responses import Response
 from src.config import build_config_from_form, default_config, save_config
 from src.config.builder import load_config_file
 from src.paths import CONFIGS_DIR, DATA_DIR, ROOT, UI_CONFIGS_DIR
+from src.shared.hf_auth import clear_hf_token, hf_auth_status, save_hf_token
+from src.training.validate_model import InvalidBaseModelError, validate_base_model
 from web.api.schemas import (
     ExportRequest,
+    HfTokenRequest,
     LoadConfigResponse,
     OllamaChatRequest,
     OllamaRegisterRequest,
     SaveConfigRequest,
     TrainRequest,
+    ValidateModelRequest,
 )
 from web.application.assets import scan_all
 from web.application.browser import browse
@@ -26,6 +30,39 @@ router = APIRouter(prefix="/api")
 @router.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@router.post("/models/validate")
+def validate_model(payload: ValidateModelRequest):
+    try:
+        check = validate_base_model(payload.base_model)
+    except InvalidBaseModelError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "ok": check.ok,
+        "ref": check.ref,
+        "kind": check.kind,
+        "checksum": check.checksum,
+        "detail": check.detail,
+    }
+
+
+@router.get("/hf/token")
+def get_hf_token_status():
+    return hf_auth_status()
+
+
+@router.put("/hf/token")
+def put_hf_token(payload: HfTokenRequest):
+    try:
+        return save_hf_token(payload.token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/hf/token")
+def delete_hf_token():
+    return clear_hf_token()
 
 
 @router.get("/templates/config")
@@ -123,15 +160,29 @@ def create_config(payload: SaveConfigRequest):
 def start_train(payload: TrainRequest):
     if not payload.dataset_paths:
         raise HTTPException(status_code=400, detail="Select at least one dataset")
+    try:
+        model_check = validate_base_model(payload.base_model)
+    except InvalidBaseModelError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     cfg = build_config_from_form(payload.model_dump())
     path = save_config(cfg, payload.save_config_as or payload.project_name)
     if not payload.start_training:
-        return {"config_path": path, "config": cfg, "job": None}
+        return {
+            "config_path": path,
+            "config": cfg,
+            "job": None,
+            "model_checksum": model_check.checksum,
+        }
     try:
         job = job_runner.start_train(path)
     except RuntimeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return {"config_path": path, "config": cfg, "job": job.to_dict()}
+    return {
+        "config_path": path,
+        "config": cfg,
+        "job": job.to_dict(),
+        "model_checksum": model_check.checksum,
+    }
 
 
 @router.post("/jobs/export")

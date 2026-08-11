@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import tempfile
 from pathlib import Path
@@ -15,7 +16,7 @@ DEFAULT_SYSTEM = (
     "Respond with the format requested in the prompt."
 )
 
-CHAT_TEMPLATE = '''TEMPLATE """{{- if .System }}<|start_header_id|>system<|end_header_id|>
+LLAMA3_TEMPLATE = '''TEMPLATE """{{- if .System }}<|start_header_id|>system<|end_header_id|>
 
 {{ .System }}<|eot_id|>{{- end }}
 {{- range .Messages }}
@@ -29,6 +30,62 @@ CHAT_TEMPLATE = '''TEMPLATE """{{- if .System }}<|start_header_id|>system<|end_h
 {{- end }}<|start_header_id|>assistant<|end_header_id|>
 """
 '''
+
+GEMMA_TEMPLATE = '''TEMPLATE """{{- $sys := "" }}
+{{- if .System }}{{- $sys = .System }}{{- end }}
+{{- range .Messages }}
+{{- if eq .Role "system" }}{{- if not $sys }}{{- $sys = .Content }}{{- end }}
+{{- else if eq .Role "user" }}<start_of_turn>user
+{{ if $sys }}{{ $sys }}
+
+{{ end }}{{ .Content }}<end_of_turn>
+{{- $sys = "" }}
+{{- else if eq .Role "assistant" }}<start_of_turn>model
+{{ .Content }}<end_of_turn>
+{{- end }}
+{{- end }}<start_of_turn>model
+"""
+'''
+
+CHAT_TEMPLATES = {
+    "llama": (LLAMA3_TEMPLATE, ['PARAMETER stop "<|eot_id|>"']),
+    "gemma": (GEMMA_TEMPLATE, ['PARAMETER stop "<end_of_turn>"', 'PARAMETER stop "<eos>"']),
+}
+
+
+def detect_gguf_family(path: Path) -> str:
+    try:
+        from gguf import GGUFReader
+
+        reader = GGUFReader(str(path))
+        field = reader.get_field("general.architecture")
+        raw = getattr(field, "contents", lambda: None)()
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", errors="ignore")
+        if isinstance(raw, (list, tuple)) and raw:
+            raw = raw[0]
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8", errors="ignore")
+        arch = str(raw or "").lower()
+        if "gemma" in arch:
+            return "gemma"
+        if "llama" in arch:
+            return "llama"
+    except Exception:
+        pass
+    for cfg in [path.parent / "config.json", *path.parent.glob("*/config.json")]:
+        if not cfg.is_file():
+            continue
+        try:
+            data = json.loads(cfg.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        blob = f"{data.get('model_type', '')} {' '.join(str(a) for a in (data.get('architectures') or []))}".lower()
+        if "gemma" in blob:
+            return "gemma"
+        if "llama" in blob:
+            return "llama"
+    return "llama"
 
 
 def _safe_model_name(name: str) -> str:
@@ -96,12 +153,14 @@ def register_gguf(
     name = _safe_model_name(model_name or path.stem)
     system = (system_prompt or DEFAULT_SYSTEM).strip()
     from_path = str(path).replace("\\", "/")
+    family = detect_gguf_family(path)
+    template, stops = CHAT_TEMPLATES.get(family, CHAT_TEMPLATES["llama"])
     modelfile = (
         f"FROM {from_path}\n\n"
-        f"{CHAT_TEMPLATE}\n"
+        f"{template}\n"
         f'SYSTEM """{system}"""\n\n'
-        'PARAMETER stop "<|eot_id|>"\n'
-        "PARAMETER temperature 0.2\n"
+        + "".join(f"{s}\n" for s in stops)
+        + "PARAMETER temperature 0.2\n"
     )
 
     with tempfile.TemporaryDirectory() as tmp:

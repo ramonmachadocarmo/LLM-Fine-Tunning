@@ -10,7 +10,9 @@ from tqdm import tqdm
 from src.shared.checkpoints import find_latest_checkpoint
 from src.shared.logging import setup_logging
 from src.training.dataset import load_and_process_dataset
+from src.training.loop_limits import hit_max_steps, parse_epochs, parse_max_steps
 from src.training.model import load_base_model, load_tokenizer, setup_lora_model
+from src.training.validate_model import validate_base_model
 
 logger = setup_logging()
 
@@ -24,6 +26,14 @@ class Trainer:
 
     def train(self) -> None:
         logger.info("Starting Training for Project: %s", self.config["project"]["name"])
+        check = validate_base_model(self.model_name)
+        logger.info(
+            "Base model validated: %s (%s) checksum=%s — %s",
+            check.ref,
+            check.kind,
+            check.checksum,
+            check.detail,
+        )
 
         tokenizer = load_tokenizer(self.model_name)
         model = load_base_model(self.model_name, self.config["model"]["load_in_4bit"])
@@ -68,10 +78,10 @@ class Trainer:
         learning_rate = float(self.train_cfg["learning_rate"])
         optimizer = bnb.optim.AdamW32bit(model.parameters(), lr=learning_rate)
 
-        epochs = self.train_cfg.get("epochs", 1)
-        max_steps = self.train_cfg.get("max_steps")
+        epochs = parse_epochs(self.train_cfg.get("epochs", 1))
+        max_steps = parse_max_steps(self.train_cfg.get("max_steps"))
         batch_size = self.train_cfg["batch_size"]
-        gradient_accumulation_steps = self.train_cfg["gradient_accumulation_steps"]
+        gradient_accumulation_steps = int(self.train_cfg["gradient_accumulation_steps"])
 
         train_dataloader = torch.utils.data.DataLoader(
             tokenized_datasets["train"],
@@ -86,11 +96,14 @@ class Trainer:
             collate_fn=collator,
         )
 
-        logger.info("Starting Training Loop...")
+        logger.info(
+            "Starting Training Loop... epochs=%s max_steps=%s",
+            epochs,
+            max_steps if max_steps is not None else "off",
+        )
         step = 0
         best_val_loss = float("inf")
-        if max_steps:
-            epochs = 999999
+        stop = False
 
         for epoch in range(start_epoch, epochs):
             model.train()
@@ -107,15 +120,16 @@ class Trainer:
                 loss = outputs.loss / gradient_accumulation_steps
                 loss.backward()
                 total_train_loss += loss.item()
+                step += 1
 
-                if (step + 1) % gradient_accumulation_steps == 0:
+                if step % gradient_accumulation_steps == 0:
                     optimizer.step()
                     optimizer.zero_grad()
                     current_loss = total_train_loss * gradient_accumulation_steps
                     progress_bar.set_postfix({"loss": current_loss})
                     total_train_loss = 0
 
-                    global_step = (step + 1) // gradient_accumulation_steps
+                    global_step = step // gradient_accumulation_steps
                     save_strategy = self.train_cfg.get("save_strategy", "epoch")
                     save_steps = int(self.train_cfg.get("save_steps", 500))
 
@@ -123,14 +137,10 @@ class Trainer:
                         checkpoint_dir = os.path.join(self.output_dir, f"checkpoint-{global_step}")
                         model.save_pretrained(checkpoint_dir)
 
-                    if max_steps and global_step >= max_steps:
+                    if hit_max_steps(step, gradient_accumulation_steps, max_steps):
                         logger.info("Reached max_steps (%s). Stopping training.", max_steps)
+                        stop = True
                         break
-
-                step += 1
-
-            if max_steps and (step // gradient_accumulation_steps) >= max_steps:
-                break
 
             model.eval()
             val_loss = 0
@@ -156,6 +166,9 @@ class Trainer:
                 best_dir = os.path.join(self.output_dir, "best_model")
                 logger.info("New Best Model! (Loss: %.4f). Saving to %s...", best_val_loss, best_dir)
                 model.save_pretrained(best_dir)
+
+            if stop:
+                break
 
         logger.info("Saving final model (latest) to %s...", self.output_dir)
         model.save_pretrained(self.output_dir)

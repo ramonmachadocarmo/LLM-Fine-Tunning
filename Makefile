@@ -1,12 +1,14 @@
-# LLM Fine-Tuning Engine — pyenv 3.11.9 + Poetry (Windows / Linux / macOS)
-# Windows:  . .\activate.ps1 && make setup && make up
-# Linux:    source ./activate.sh && make setup && make up
+# LLM Fine-Tuning Engine - pyenv 3.11.9 + Poetry (Windows / Linux / macOS)
+# First time:  ./install.sh   OR   .\install.ps1
+# Then:        make setup && make up
 
 HOST ?= 127.0.0.1
 PORT ?= 7860
 CONFIG ?= configs/default.yaml
 PY_VER ?= 3.11.9
 POETRY ?= poetry
+EVAL_SET ?= data/eval.sample.jsonl
+EVAL_TARGET ?= adapter
 
 ifeq ($(OS),Windows_NT)
   PYENV_ROOT ?= $(USERPROFILE)/.pyenv/pyenv-win
@@ -22,7 +24,6 @@ else
   PYTHON_BIN := $(shell command -v python3 2>/dev/null || command -v python)
 endif
 
-# Prefer pyenv binary when present; otherwise PATH `python` (after activate.sh / activate.ps1).
 ifeq ($(wildcard $(PYTHON_BIN)),)
   HELPER_PY := python
 else
@@ -31,28 +32,23 @@ endif
 
 RUN = $(POETRY) run python
 HELPER_SCRIPT := scripts/dev_helpers.py
+BOOT = "$(HELPER_PY)" $(HELPER_SCRIPT)
 
 ifeq ($(wildcard $(HELPER_SCRIPT)),)
-  $(error $(HELPER_SCRIPT) is missing — incomplete checkout)
+  $(error $(HELPER_SCRIPT) is missing - incomplete checkout)
 endif
 
-.PHONY: help up down setup check fix-torch dirs ui generate prune train verify chat export status clean test
+.PHONY: help env up down setup check fix-torch dirs ui generate prune train verify eval chat export status clean test doctor
+
+.DEFAULT_GOAL := help
 
 help:
-	@echo "LLM Fine-Tuning Engine (pyenv + Poetry)"
-	@echo ""
-	@echo "  make setup      - pyenv $(PY_VER) + poetry env + deps (torch CUDA)"
-	@echo "  make fix-torch  - restore torch 2.5.1+cu121"
-	@echo "  make check      - validate Python / Poetry / CUDA"
-	@echo "  make test       - unit tests (pytest)"
-	@echo "  make up         - UI at http://$(HOST):$(PORT)"
-	@echo "  make down       - free port $(PORT)"
-	@echo "  make train      - train ($(CONFIG))"
-	@echo "  make export verify chat generate prune status clean"
-	@echo ""
-	@echo "Activate:"
-	@echo "  Windows:  . .\\activate.ps1"
-	@echo "  Linux:    source ./activate.sh"
+	@$(BOOT) help --py-ver "$(PY_VER)" --host "$(HOST)" --port "$(PORT)" --config "$(CONFIG)" --eval-set "$(EVAL_SET)" --eval-target "$(EVAL_TARGET)"
+
+env: doctor
+
+doctor:
+	@$(BOOT) doctor --pyenv-root "$(PYENV_ROOT)" --python-bin "$(PYTHON_BIN)"
 
 setup:
 	@echo ">>> pyenv $(PY_VER)"
@@ -60,7 +56,7 @@ setup:
 	pyenv local $(PY_VER)
 	@echo ">>> poetry env -> $(PYTHON_BIN)"
 	$(POETRY) env use "$(PYTHON_BIN)"
-	@echo ">>> poetry lock + install"
+	@echo ">>> poetry lock + sync"
 	$(POETRY) lock
 	$(POETRY) sync
 	@$(MAKE) fix-torch
@@ -68,7 +64,7 @@ setup:
 
 fix-torch:
 	@echo ">>> restore torch CUDA"
-	"$(HELPER_PY)" $(HELPER_SCRIPT) fix-torch
+	$(BOOT) fix-torch
 
 check:
 	@echo ">>> check"
@@ -87,10 +83,10 @@ up: down dirs
 
 down:
 	@echo ">>> freeing port $(PORT)..."
-	-"$(HELPER_PY)" $(HELPER_SCRIPT) free-port $(PORT)
+	-$(BOOT) free-port $(PORT)
 
 dirs:
-	-"$(HELPER_PY)" $(HELPER_SCRIPT) dirs
+	-$(BOOT) dirs
 
 status:
 	-@curl -s http://$(HOST):$(PORT)/api/health || echo "UI offline"
@@ -108,6 +104,9 @@ train: check
 
 verify:
 	$(RUN) scripts/verify.py --config $(CONFIG) --prompt "Explain LoRA fine-tuning in one short paragraph."
+
+eval: dirs
+	$(RUN) scripts/eval.py --config $(CONFIG) --eval-set $(EVAL_SET) --target $(EVAL_TARGET)
 
 chat:
 	$(RUN) scripts/chat.py --config $(CONFIG)

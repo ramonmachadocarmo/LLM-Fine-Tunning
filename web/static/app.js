@@ -318,6 +318,88 @@ function renderAssets(assets) {
   renderSelectedDatasets();
 }
 
+async function refreshHfTokenStatus() {
+  const el = $("#hf-token-status");
+  if (!el) return;
+  try {
+    const st = await api("/api/hf/token");
+    if (st.configured) {
+      el.textContent = t("setup.hf_token_status_ok", {
+        masked: st.masked || "••••",
+        source: st.source,
+      });
+      el.className = "hint status ok";
+    } else {
+      el.textContent = t("setup.hf_token_status_none");
+      el.className = "hint";
+    }
+  } catch {
+    el.textContent = t("setup.hf_token_hint");
+    el.className = "hint";
+  }
+}
+
+async function saveHfToken() {
+  const token = $("#hf_token")?.value?.trim() || "";
+  if (!token) {
+    setStatus(t("msg.hf_token_need"), "bad");
+    return;
+  }
+  await api("/api/hf/token", {
+    method: "PUT",
+    body: JSON.stringify({ token }),
+  });
+  if ($("#hf_token")) $("#hf_token").value = "";
+  await refreshHfTokenStatus();
+  setStatus(t("msg.hf_token_saved"), "ok");
+}
+
+async function clearHfToken() {
+  await api("/api/hf/token", { method: "DELETE" });
+  if ($("#hf_token")) $("#hf_token").value = "";
+  await refreshHfTokenStatus();
+  setStatus(t("msg.hf_token_cleared"), "ok");
+}
+
+async function validateBaseModel() {
+  const ref = $("#base_model")?.value?.trim() || "";
+  const statusEl = $("#model-check-status");
+  if (!ref) {
+    setStatus(t("msg.model_need_ref"), "bad");
+    if (statusEl) {
+      statusEl.hidden = false;
+      statusEl.className = "hint status bad";
+      statusEl.textContent = t("msg.model_need_ref");
+    }
+    return;
+  }
+  setStatus(t("msg.validating_model"));
+  if (statusEl) {
+    statusEl.hidden = false;
+    statusEl.className = "hint";
+    statusEl.textContent = t("msg.validating_model");
+  }
+  try {
+    const data = await api("/api/models/validate", {
+      method: "POST",
+      body: JSON.stringify({ base_model: ref }),
+    });
+    const msg = t("msg.model_ok", { kind: data.kind, checksum: data.checksum });
+    const detail = data.detail ? `${msg} — ${data.detail}` : msg;
+    setStatus(detail, "ok");
+    if (statusEl) {
+      statusEl.className = "hint status ok";
+      statusEl.textContent = detail;
+    }
+  } catch (err) {
+    setStatus(err.message, "bad");
+    if (statusEl) {
+      statusEl.className = "hint status bad";
+      statusEl.textContent = err.message;
+    }
+  }
+}
+
 async function api(path, options) {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json", ...(options?.headers || {}) },
@@ -449,36 +531,78 @@ function parseProgress(lines) {
     const line = lines[i];
     const epoch = line.match(/Epoch\s+(\d+)\s*\/\s*(\d+)/i);
     const pct = line.match(/(\d+(?:\.\d+)?)\s*%/);
-    const steps = line.match(/(\d+)\s*\/\s*(\d+)/);
     const loss = line.match(/loss\s*=\s*([0-9.]+)/i);
+    // Prefer batch/step fraction (e.g. 232/2700), not Epoch 1/2.
+    const allFracs = [...line.matchAll(/(\d+)\s*\/\s*(\d+)/g)].map((m) => ({
+      cur: Number(m[1]),
+      tot: Number(m[2]) || 1,
+      raw: m[0],
+    }));
+    let steps = null;
+    if (allFracs.length) {
+      const epCur = epoch ? Number(epoch[1]) : null;
+      const epTot = epoch ? Number(epoch[2]) : null;
+      const candidates = allFracs.filter(
+        (f) => !(epCur != null && f.cur === epCur && f.tot === epTot)
+      );
+      steps = (candidates.length ? candidates : allFracs).reduce((a, b) =>
+        b.tot > a.tot ? b : a
+      );
+    }
     if (!epoch && !pct && !steps) continue;
 
-    let percent = null;
-    let detail = [];
-    if (epoch && steps) {
-      const ep = Number(epoch[1]);
-      const eps = Number(epoch[2]);
-      const cur = Number(steps[1]);
-      const tot = Number(steps[2]) || 1;
-      percent = Math.min(100, (((ep - 1) + cur / tot) / Math.max(eps, 1)) * 100);
-      detail.push(`Epoch ${ep}/${eps}`);
-      detail.push(`${cur}/${tot}`);
-    } else if (pct) {
-      percent = Number(pct[1]);
-      if (epoch) detail.push(`Epoch ${epoch[1]}/${epoch[2]}`);
-      if (steps) detail.push(`${steps[1]}/${steps[2]}`);
-    } else if (steps) {
-      const cur = Number(steps[1]);
-      const tot = Number(steps[2]) || 1;
-      percent = (cur / tot) * 100;
-      detail.push(`${cur}/${tot}`);
+    const ep = epoch ? Number(epoch[1]) : null;
+    const rawEps = epoch ? Number(epoch[2]) : null;
+    const eps = rawEps != null && rawEps < 10000 ? rawEps : null;
+    const stepPct =
+      steps != null
+        ? Math.min(100, (steps.cur / Math.max(steps.tot, 1)) * 100)
+        : pct
+          ? Number(pct[1])
+          : null;
+    let overallPct = null;
+    if (ep != null && eps != null && stepPct != null) {
+      overallPct = Math.min(100, (((ep - 1) + stepPct / 100) / Math.max(eps, 1)) * 100);
+    } else if (stepPct != null && !epoch) {
+      overallPct = stepPct;
+    } else if (ep != null && eps != null) {
+      overallPct = Math.min(100, ((ep - 1) / Math.max(eps, 1)) * 100);
     }
-    if (loss) detail.push(`loss ${loss[1]}`);
-    if (percent == null) continue;
-    best = { percent: Math.max(0, Math.min(100, percent)), detail: detail.join(" · ") };
+
+    const epochDetail = [];
+    if (ep != null && eps != null) epochDetail.push(`Epoch ${ep}/${eps}`);
+    else if (ep != null) epochDetail.push(`Epoch ${ep}`);
+    if (steps) epochDetail.push(`${steps.cur}/${steps.tot}`);
+    if (loss) epochDetail.push(`loss ${loss[1]}`);
+
+    const overallDetail = [];
+    if (ep != null && eps != null) overallDetail.push(`Epoch ${ep}/${eps}`);
+    else if (ep != null) overallDetail.push(`Epoch ${ep}`);
+    if (steps && eps) {
+      const done = (ep - 1) * steps.tot + steps.cur;
+      const all = eps * steps.tot;
+      overallDetail.push(`${done}/${all}`);
+    }
+    if (loss) overallDetail.push(`loss ${loss[1]}`);
+
+    if (overallPct == null && stepPct == null) continue;
+    best = {
+      overall: {
+        percent: Math.max(0, Math.min(100, overallPct ?? stepPct ?? 0)),
+        detail: overallDetail.join(" · "),
+      },
+      epoch: {
+        percent: Math.max(0, Math.min(100, stepPct ?? 0)),
+        detail: epochDetail.join(" · "),
+      },
+    };
     break;
   }
   return best;
+}
+
+function fmtPct(n) {
+  return `${n.toFixed(n >= 10 ? 0 : 1)}%`;
 }
 
 function updateProgress(lines, status) {
@@ -488,11 +612,18 @@ function updateProgress(lines, status) {
     box.hidden = true;
     return;
   }
-  const percent = status === "completed" ? 100 : parsed?.percent ?? 0;
   box.hidden = false;
-  $("#progress-label").textContent = `${percent.toFixed(percent >= 10 ? 0 : 1)}%`;
-  $("#progress-detail").textContent = parsed?.detail || (status === "completed" ? t("msg.completed") : "");
-  $("#progress-fill").style.width = `${percent}%`;
+  const done = status === "completed";
+  const overall = done ? 100 : parsed?.overall?.percent ?? 0;
+  const epoch = done ? 100 : parsed?.epoch?.percent ?? 0;
+  $("#progress-label-overall").textContent = fmtPct(overall);
+  $("#progress-fill-overall").style.width = `${overall}%`;
+  $("#progress-detail-overall").textContent =
+    parsed?.overall?.detail || (done ? t("msg.completed") : "");
+  $("#progress-label-epoch").textContent = fmtPct(epoch);
+  $("#progress-fill-epoch").style.width = `${epoch}%`;
+  $("#progress-detail-epoch").textContent =
+    parsed?.epoch?.detail || (done ? t("msg.completed") : "");
 }
 
 function isNearBottom(el, threshold = 80) {
@@ -641,6 +772,15 @@ function wire() {
     btn.addEventListener("click", () => {
       openExplorer(btn.dataset.browse).catch((e) => setStatus(e.message, "bad"));
     });
+  });
+  $("#btn-validate-model")?.addEventListener("click", () => {
+    validateBaseModel().catch((e) => setStatus(e.message, "bad"));
+  });
+  $("#btn-save-hf-token")?.addEventListener("click", () => {
+    saveHfToken().catch((e) => setStatus(e.message, "bad"));
+  });
+  $("#btn-clear-hf-token")?.addEventListener("click", () => {
+    clearHfToken().catch((e) => setStatus(e.message, "bad"));
   });
 
   $("#explorer-close").addEventListener("click", () => $("#explorer").close());
@@ -882,6 +1022,7 @@ async function boot() {
   $("#log-view").textContent = t("train.no_job_log");
   $("#ollama-status").textContent = t("chat.checking");
   await refreshAssets();
+  await refreshHfTokenStatus();
   await refreshJobs();
   const preferred =
     state.assets?.preferred_config ||

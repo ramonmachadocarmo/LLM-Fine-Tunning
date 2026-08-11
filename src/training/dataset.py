@@ -6,17 +6,11 @@ from datasets import load_dataset
 from transformers import DataCollatorForLanguageModeling
 
 from src.shared.logging import setup_logging
+from src.training.chat_format import format_system_prompt
+
+__all__ = ["format_system_prompt", "load_and_process_dataset"]
 
 logger = setup_logging("Dataset")
-
-
-def format_system_prompt(system_prompt: str, instruction: str, output: str) -> str:
-    """Format example into Llama 3 chat template."""
-    return (
-        f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt.strip()}<|eot_id|>"
-        f"<|start_header_id|>user<|end_header_id|>\n\n{instruction}<|eot_id|>"
-        f"<|start_header_id|>assistant<|end_header_id|>\n\n{output}<|eot_id|>"
-    )
 
 
 def load_and_process_dataset(
@@ -52,7 +46,9 @@ def load_and_process_dataset(
     )
 
     def formatting_prompts_func(example):
-        text = format_system_prompt(system_prompt, example["instruction"], example["output"])
+        text = format_system_prompt(
+            system_prompt, example["instruction"], example["output"], tokenizer=tokenizer
+        )
         return {"text": text}
 
     dataset_dict = dataset_split.map(formatting_prompts_func)

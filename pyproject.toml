@@ -28,6 +28,8 @@ uvicorn = { version = "^0.34.0", extras = ["standard"] }
 python-multipart = "^0.0.20"
 packaging = ">=23,<26"
 gguf = "^0.17.0"
+protobuf = "^5.29.0"
+sentencepiece = "0.2.0"
 
 [[tool.poetry.source]]
 name = "pytorch-cu121"

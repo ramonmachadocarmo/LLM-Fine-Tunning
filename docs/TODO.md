@@ -4,9 +4,9 @@ English checklist for work **beyond** the current QLoRA fine-tuning loop.
 
 ## Purpose
 
-**Today:** configure → train LoRA/QLoRA → export GGUF → chat via Ollama (CLI + web UI).
+**Today:** configure → train LoRA/QLoRA → offline eval (base/adapter) → export GGUF → chat via Ollama (CLI + web UI).
 
-**Gap:** little structured evaluation, no RAG path, weak experiment tracking, no preference tuning, limited serving/safety tooling.
+**Gap:** eval UI + automated GGUF scoring still open; no RAG path, weak experiment tracking, no preference tuning, limited serving/safety tooling.
 
 Use this file to prioritize the next product slices. Mark items `- [x]` when done and add a line under [Done log](#done-log).
 
@@ -33,13 +33,15 @@ Eval → RAG → Tracking → Preference (DPO/ORPO) → Serving / safety / multi
 
 **Acceptance criteria**
 
-- [ ] Fixed eval set (`data/eval.sample.jsonl` or similar) with `instruction` + expected signal
-- [ ] Metrics: at least exact match **or** containment, plus JSON-validity when output should be JSON
-- [ ] CLI: `make eval` (and/or `scripts/eval.py`) writing a small report under `logs/`
+- [x] Fixed eval set (`data/eval.sample.jsonl` or similar) with `instruction` + expected signal
+- [x] Metrics: at least exact match **or** containment, plus JSON-validity when output should be JSON
+- [x] CLI: `make eval` (and/or `scripts/eval.py`) writing a small report under `logs/`
 - [ ] Optional light UI surface (panel or tab) to pick config/model and show last report
-- [ ] Document how to compare base vs adapter vs Ollama GGUF
+- [x] Document how to compare base vs adapter vs Ollama GGUF
 
-**Suggested touchpoints:** [`scripts/verify.py`](../scripts/verify.py), [`web/`](../web/), [`Makefile`](../Makefile), [`src/training/`](../src/training/)
+**Suggested touchpoints:** [`scripts/eval.py`](../scripts/eval.py), [`src/evaluation/`](../src/evaluation/), [`docs/EVAL.md`](EVAL.md), [`scripts/verify.py`](../scripts/verify.py), [`web/`](../web/), [`Makefile`](../Makefile)
+
+**In progress (branch `feat/phase-1-eval-harness`):** core harness + docs done; UI still open.
 
 ---
 
@@ -114,9 +116,11 @@ Eval → RAG → Tracking → Preference (DPO/ORPO) → Serving / safety / multi
 
 | Date | Item | PR / commit |
 |------|------|-------------|
-| — | — | — |
+| 2026-08-10 | Phase 1: eval set + metrics + `make eval` / `scripts/eval.py` reports under `logs/eval/` | `feat/phase-1-eval-harness` |
+| 2026-08-10 | Phase 1: docs — README, ARCHITECTURE, EVAL.md (base vs adapter vs GGUF) | `feat/phase-1-eval-harness` |
 
 ## Related
 
 - [ARCHITECTURE.md](ARCHITECTURE.md)
+- [EVAL.md](EVAL.md)
 - [README.md](../README.md)

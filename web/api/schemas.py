@@ -31,6 +31,14 @@ class SaveConfigRequest(TrainRequest):
     start_training: bool = False
 
 
+class ValidateModelRequest(BaseModel):
+    base_model: str = Field(..., min_length=1)
+
+
+class HfTokenRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
 class ExportRequest(BaseModel):
     config_path: str
 

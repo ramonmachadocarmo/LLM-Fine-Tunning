@@ -52,7 +52,20 @@ def merge_model(config: dict[str, Any]) -> str:
     return merged_dir
 
 
+def _is_llama3(merged_dir: str) -> bool:
+    config_json_path = os.path.join(merged_dir, "config.json")
+    if not os.path.exists(config_json_path):
+        return False
+    with open(config_json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    model_type = str(data.get("model_type") or "").lower()
+    arches = " ".join(str(a) for a in (data.get("architectures") or [])).lower()
+    return "llama" in model_type or "llama" in arches
+
+
 def _patch_llama3_eos(merged_dir: str) -> None:
+    if not _is_llama3(merged_dir):
+        return
     config_json_path = os.path.join(merged_dir, "config.json")
     if os.path.exists(config_json_path):
         with open(config_json_path, "r", encoding="utf-8") as f:
@@ -87,6 +100,14 @@ def ensure_llama_cpp() -> Path:
         logger.info("Installing gguf (only; keeps project CUDA torch intact)")
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "gguf"],
+            check=True,
+        )
+    try:
+        import sentencepiece  # noqa: F401
+    except ImportError:
+        logger.info("Installing sentencepiece (Gemma / SPM tokenizers)")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "sentencepiece"],
             check=True,
         )
     return llama_dir

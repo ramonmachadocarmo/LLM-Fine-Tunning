@@ -89,7 +89,18 @@
               <input name="base_model" id="base_model" required list="hf-suggestions" placeholder="meta-llama/Llama-3.2-3B-Instruct" />
               <datalist id="hf-suggestions"></datalist>
               <button type="button" class="browse-btn" data-browse="base_model" data-i18n="setup.browse">Explorar</button>
+              <button type="button" class="browse-btn" id="btn-validate-model" data-i18n="setup.validate_model">Validar</button>
             </div>
+            <p class="hint" id="model-check-status" hidden></p>
+          </label>
+          <label>
+            <span data-i18n="setup.hf_token">Token Hugging Face (gated)</span>
+            <div class="path-row">
+              <input type="password" id="hf_token" autocomplete="off" spellcheck="false" placeholder="hf_…" data-i18n-placeholder="setup.hf_token_ph" />
+              <button type="button" class="browse-btn" id="btn-save-hf-token" data-i18n="setup.hf_token_save">Salvar token</button>
+              <button type="button" class="browse-btn" id="btn-clear-hf-token" data-i18n="setup.hf_token_clear">Limpar</button>
+            </div>
+            <p class="hint" id="hf-token-status" data-i18n="setup.hf_token_hint">Modelos gated (Gemma, Llama…) precisam de HF_TOKEN em .env. Aceite a licença na página do modelo.</p>
           </label>
           <label class="check tip" data-i18n-tip="setup.qlora_tip" data-tip="Carrega o modelo em 4-bit (QLoRA), reduzindo VRAM.">
             <input type="checkbox" name="load_in_4bit" id="load_in_4bit" checked />
@@ -207,12 +218,25 @@ Respond with the format requested in the prompt (plain text or JSON when asked).
           <p class="log-meta" id="log-meta">Nenhum job selecionado</p>
         </div>
         <div class="progress-box" id="progress-box" hidden>
-          <div class="progress-top">
-            <span id="progress-label">0%</span>
-            <span id="progress-detail" class="muted"></span>
+          <div class="progress-row">
+            <div class="progress-top">
+              <span class="progress-kind" data-i18n="train.progress_overall">Total (todas as epochs)</span>
+              <span id="progress-label-overall">0%</span>
+            </div>
+            <p id="progress-detail-overall" class="progress-detail muted"></p>
+            <div class="progress-track" aria-hidden="true">
+              <div class="progress-fill" id="progress-fill-overall" style="width: 0%"></div>
+            </div>
           </div>
-          <div class="progress-track" aria-hidden="true">
-            <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+          <div class="progress-row">
+            <div class="progress-top">
+              <span class="progress-kind" data-i18n="train.progress_epoch">Epoch atual (steps)</span>
+              <span id="progress-label-epoch">0%</span>
+            </div>
+            <p id="progress-detail-epoch" class="progress-detail muted"></p>
+            <div class="progress-track" aria-hidden="true">
+              <div class="progress-fill" id="progress-fill-epoch" style="width: 0%"></div>
+            </div>
           </div>
         </div>
       </div>
