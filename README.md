@@ -5,6 +5,7 @@
 [![PyTorch CUDA 12.1](https://img.shields.io/badge/PyTorch-2.5.1%2Bcu121-EE4C2C.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-pytest-0A7EA4.svg)](tests/)
+[![Sponsor](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/ramonmachadocarmo)
 
 **Repo:** [ramonmachadocarmo/LLM-Fine-Tunning](https://github.com/ramonmachadocarmo/LLM-Fine-Tunning)
 
@@ -215,3 +216,9 @@ First-time host deps: `.\install.ps1` (Windows) or `./install.sh` (Linux/macOS).
 Portable helpers: `scripts/dev_helpers.py` (`dirs`, `free-port`, `fix-torch`).
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/EVAL.md](docs/EVAL.md), and the roadmap in [docs/TODO.md](docs/TODO.md).
+
+## Support
+
+If this project helps you, consider sponsoring:
+
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub_Sponsors-ea4aaa?style=for-the-badge&logo=github)](https://github.com/sponsors/ramonmachadocarmo)
